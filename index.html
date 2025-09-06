@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volleyball Lineup Optimizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/umd/lucide.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        
+        /* Make it feel more app-like on mobile */
+        @media (max-width: 768px) {
+            html, body {
+                height: 100%;
+                overflow-x: hidden;
+            }
+        }
+
+        /* Custom scrollbar for better mobile experience */
+        ::-webkit-scrollbar {
+            width: 3px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+        const { Plus, Edit3, RotateCcw, RotateCw, Save } = lucide;
+
+        const VolleyballApp = () => {
+            // Initialize with 10 default players
+            const [players, setPlayers] = useState([
+                { id: 1, name: '1', defense: 3, serving: 3, active: true },
+                { id: 2, name: '2', defense: 3, serving: 3, active: true },
+                { id: 3, name: '3', defense: 3, serving: 3, active: true },
+                { id: 4, name: '4', defense: 3, serving: 3, active: true },
+                { id: 5, name: '5', defense: 3, serving: 3, active: true },
+                { id: 6, name: '6', defense: 3, serving: 3, active: true },
+                { id: 7, name: '7', defense: 3, serving: 3, active: true },
+                { id: 8, name: '8', defense: 3, serving: 3, active: true },
+                { id: 9, name: '9', defense: 3, serving: 3, active: true },
+                { id: 10, name: '10', defense: 3, serving: 3, active: true }
+            ]);
+            const [showPlayerForm, setShowPlayerForm] = useState(false);
+            const [editingPlayer, setEditingPlayer] = useState(null);
+            const [teamName, setTeamName] = useState('My Team');
+
+            // Form state
+            const [playerForm, setPlayerForm] = useState({
+                name: '',
+                defense: 3,
+                serving: 3,
+                active: true
+            });
+
+            // Court positions (6 on court, rest on bench)
+            const [courtPositions, setCourtPositions] = useState({
+                backLeft: null,    // Position 1 - Serving position
+                frontLeft: null,   // Position 2
+                frontMiddle: null, // Position 3
+                frontRight: null,  // Position 4
+                backRight: null,   // Position 5
+                backMiddle: null,  // Position 6
+                bench: []
+            });
+
+            const handleAddPlayer = () => {
+                if (playerForm.name.trim()) {
+                    const newPlayer = {
+                        id: Date.now(),
+                        ...playerForm
+                    };
+                    setPlayers([...players, newPlayer]);
+                    setPlayerForm({ name: '', defense: 3, serving: 3, active: true });
+                    setShowPlayerForm(false);
+                }
+            };
+
+            const handleEditPlayer = (player) => {
+                setEditingPlayer(player.id);
+                setPlayerForm(player);
+                setShowPlayerForm(true);
+            };
+
+            const handleUpdatePlayer = () => {
+                setPlayers(players.map(p => 
+                    p.id === editingPlayer ? { ...playerForm, id: editingPlayer } : p
+                ));
+                setEditingPlayer(null);
+                setPlayerForm({ name: '', defense: 3, serving: 3, active: true });
+                setShowPlayerForm(false);
+            };
+
+            const togglePlayerActive = (id) => {
+                setPlayers(players.map(p => 
+                    p.id === id ? { ...p, active: !p.active } : p
+                ));
+            };
+
+            const autoArrangePlayers = () => {
+                const activePlayers = players.filter(p => p.active);
+                if (activePlayers.length < 6) return;
+
+                // Assign players to positions in order: Player 1 -> Position 1, Player 2 -> Position 2, etc.
+                // Position mapping: 1=backLeft, 2=frontLeft, 3=frontMiddle, 4=frontRight, 5=backRight, 6=backMiddle
+                const newPositions = {
+                    backLeft: activePlayers.find(p => p.name === '1') || activePlayers[0],     // Position 1
+                    frontLeft: activePlayers.find(p => p.name === '2') || activePlayers[1],    // Position 2
+                    frontMiddle: activePlayers.find(p => p.name === '3') || activePlayers[2],  // Position 3
+                    frontRight: activePlayers.find(p => p.name === '4') || activePlayers[3],   // Position 4
+                    backRight: activePlayers.find(p => p.name === '5') || activePlayers[4],    // Position 5
+                    backMiddle: activePlayers.find(p => p.name === '6') || activePlayers[5],   // Position 6
+                    bench: activePlayers.slice(6) // Remaining players go to bench in order
+                };
+                setCourtPositions(newPositions);
+            };
+
+            const rotateForward = () => {
+                // Only rotate if we have players on the court
+                const courtPlayers = [
+                    courtPositions.backLeft,
+                    courtPositions.backMiddle,
+                    courtPositions.backRight,
+                    courtPositions.frontLeft,
+                    courtPositions.frontMiddle,
+                    courtPositions.frontRight
+                ].filter(Boolean);
+                
+                if (courtPlayers.length < 6) return;
+
+                // Volleyball rotation: clockwise around positions
+                // Position 6 (backMiddle) -> 5 (backRight) -> 4 (frontRight) -> 3 (frontMiddle) -> 2 (frontLeft) -> 1 (backLeft) -> bench
+                const newPositions = {
+                    backRight: courtPositions.backMiddle,     // Position 6 -> 5
+                    frontRight: courtPositions.backRight,    // Position 5 -> 4
+                    frontMiddle: courtPositions.frontRight,  // Position 4 -> 3
+                    frontLeft: courtPositions.frontMiddle,   // Position 3 -> 2
+                    backLeft: courtPositions.frontLeft,     // Position 2 -> 1
+                    bench: [...courtPositions.bench]
+                };
+
+                // Handle bench rotation and player entering court
+                const newBench = [...courtPositions.bench];
+                
+                // Player from position 1 (backLeft) goes to end of bench
+                newBench.push(courtPositions.backLeft);
+                
+                // Next player from bench (first in line) comes to position 6 (backMiddle)
+                if (newBench.length > 0) {
+                    newPositions.backMiddle = newBench.shift();
+                }
+                
+                newPositions.bench = newBench;
+                setCourtPositions(newPositions);
+            };
+
+            const rotateBackward = () => {
+                // Only rotate if we have players on the court
+                const courtPlayers = [
+                    courtPositions.backLeft,
+                    courtPositions.backMiddle,
+                    courtPositions.backRight,
+                    courtPositions.frontLeft,
+                    courtPositions.frontMiddle,
+                    courtPositions.frontRight
+                ].filter(Boolean);
+                
+                if (courtPlayers.length < 6) return;
+
+                // Reverse volleyball rotation: counter-clockwise around positions
+                // Position 1 (backLeft) -> 2 (frontLeft) -> 3 (frontMiddle) -> 4 (frontRight) -> 5 (backRight) -> 6 (backMiddle) -> bench
+                const newPositions = {
+                    frontLeft: courtPositions.backLeft,      // Position 1 -> 2
+                    frontMiddle: courtPositions.frontLeft,   // Position 2 -> 3
+                    frontRight: courtPositions.frontMiddle,  // Position 3 -> 4
+                    backRight: courtPositions.frontRight,    // Position 4 -> 5
+                    backMiddle: courtPositions.backRight,    // Position 5 -> 6
+                    bench: [...courtPositions.bench]
+                };
+
+                // Handle bench rotation in reverse
+                const newBench = [...courtPositions.bench];
+                
+                // Player from position 6 (backMiddle) goes to front of bench
+                newBench.unshift(courtPositions.backMiddle);
+                
+                // Last player from bench comes to position 1 (backLeft)
+                if (newBench.length > 0) {
+                    newPositions.backLeft = newBench.pop();
+                }
+                
+                newPositions.bench = newBench;
+                setCourtPositions(newPositions);
+            };
+
+            const PlayerTile = ({ player, position, isOnCourt }) => (
+                React.createElement('div', {
+                    className: `p-3 rounded-lg shadow-md cursor-pointer transition-all ${
+                        player.active 
+                            ? (isOnCourt ? 'bg-blue-100 border-2 border-blue-500' : 'bg-green-100 border-2 border-green-400')
+                            : 'bg-gray-200 border-2 border-gray-300'
+                    }`,
+                    onClick: () => handleEditPlayer(player)
+                },
+                    React.createElement('div', { className: "font-semibold text-sm" }, player.name),
+                    position && React.createElement('div', { className: "text-xs text-gray-600 mt-1" }, position)
+                )
+            );
+
+            const CourtDisplay = () => (
+                React.createElement('div', { className: "bg-orange-50 border-2 border-orange-300 rounded-lg p-4 mb-6" },
+                    React.createElement('div', { className: "text-center text-sm font-semibold mb-4 text-orange-800" },
+                        `${teamName} - Court Layout`
+                    ),
+                    
+                    // Back Row (20 ft line) - furthest from net
+                    React.createElement('div', { className: "border-b-2 border-dashed border-orange-400 pb-3 mb-3" },
+                        React.createElement('div', { className: "text-xs text-center mb-2 text-orange-700" }, "Back Row (20 ft)"),
+                        React.createElement('div', { className: "grid grid-cols-3 gap-2" },
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Left (Serve)"),
+                                courtPositions.backLeft ? 
+                                    React.createElement(PlayerTile, { player: courtPositions.backLeft, position: "BL", isOnCourt: true }) :
+                                    React.createElement('div', { className: "h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center" },
+                                        React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
+                                    )
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Middle"),
+                                courtPositions.backMiddle ? 
+                                    React.createElement(PlayerTile, { player: courtPositions.backMiddle, position: "BM", isOnCourt: true }) :
+                                    React.createElement('div', { className: "h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center" },
+                                        React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
+                                    )
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Right"),
+                                courtPositions.backRight ? 
+                                    React.createElement(PlayerTile, { player: courtPositions.backRight, position: "BR", isOnCourt: true }) :
+                                    React.createElement('div', { className: "h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center" },
+                                        React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
+                                    )
+                            )
+                        )
+                    ),
+
+                    // Front Row (10 ft line)
+                    React.createElement('div', { className: "border-b-2 border-dashed border-orange-400 pb-3 mb-3" },
+                        React.createElement('div', { className: "text-xs text-center mb-2 text-orange-700" }, "Front Row (10 ft)"),
+                        React.createElement('div', { className: "grid grid-cols-3 gap-2" },
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Left"),
+                                courtPositions.frontLeft ? 
+                                    React.createElement(PlayerTile, { player: courtPositions.frontLeft, position: "FL", isOnCourt: true }) :
+                                    React.createElement('div', { className: "h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center" },
+                                        React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
+                                    )
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Middle"),
+                                courtPositions.frontMiddle ? 
+                                    React.createElement(PlayerTile, { player: courtPositions.frontMiddle, position: "FM", isOnCourt: true }) :
+                                    React.createElement('div', { className: "h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center" },
+                                        React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
+                                    )
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Right"),
+                                courtPositions.frontRight ? 
+                                    React.createElement(PlayerTile, { player: courtPositions.frontRight, position: "FR", isOnCourt: true }) :
+                                    React.createElement('div', { className: "h-16 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center" },
+                                        React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
+                                    )
+                            )
+                        )
+                    ),
+
+                    // Net at the bottom
+                    React.createElement('div', { className: "w-full h-2 bg-black mb-4 rounded" }),
+
+                    // Rotation Controls
+                    React.createElement('div', { className: "flex justify-center gap-4 mb-4" },
+                        React.createElement('button', {
+                            onClick: rotateBackward,
+                            className: "flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed",
+                            disabled: [courtPositions.backLeft, courtPositions.backMiddle, courtPositions.backRight, courtPositions.frontLeft, courtPositions.frontMiddle, courtPositions.frontRight].filter(Boolean).length < 6
+                        },
+                            React.createElement(RotateCcw, { size: 16 }),
+                            "Previous"
+                        ),
+                        React.createElement('button', {
+                            onClick: rotateForward,
+                            className: "flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed",
+                            disabled: [courtPositions.backLeft, courtPositions.backMiddle, courtPositions.backRight, courtPositions.frontLeft, courtPositions.frontMiddle, courtPositions.frontRight].filter(Boolean).length < 6
+                        },
+                            React.createElement(RotateCw, { size: 16 }),
+                            "Next"
+                        )
+                    )
+                )
+            );
+
+            const BenchDisplay = () => (
+                React.createElement('div', { className: "bg-green-50 border-2 border-green-300 rounded-lg p-4 mb-6" },
+                    React.createElement('div', { className: "text-center text-sm font-semibold mb-3 text-green-800" },
+                        "Bench Players (Next to rotate in at bottom)"
+                    ),
+                    React.createElement('div', { className: "space-y-2" },
+                        courtPositions.bench.map((player, index) => (
+                            React.createElement('div', { key: player.id, className: "flex items-center gap-2" },
+                                React.createElement('span', { className: "text-xs w-6 text-center" }, courtPositions.bench.length - index),
+                                React.createElement(PlayerTile, { player: player, isOnCourt: false })
+                            )
+                        )),
+                        courtPositions.bench.length === 0 && (
+                            React.createElement('div', { className: "text-center text-gray-500 text-sm" }, "No bench players")
+                        )
+                    )
+                )
+            );
+
+            return React.createElement('div', { className: "max-w-md mx-auto bg-white min-h-screen p-4" },
+                // Header
+                React.createElement('div', { className: "flex items-center justify-between mb-6" },
+                    React.createElement('input', {
+                        type: "text",
+                        value: teamName,
+                        onChange: (e) => setTeamName(e.target.value),
+                        className: "text-lg font-bold bg-transparent border-b-2 border-gray-300 focus:border-blue-500 outline-none"
+                    }),
+                    React.createElement('button', { className: "p-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600" },
+                        React.createElement(Save, { size: 18 })
+                    )
+                ),
+
+                // Court Display
+                React.createElement(CourtDisplay),
