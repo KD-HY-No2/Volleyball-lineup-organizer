@@ -3,21 +3,21 @@ const CACHE_NAME = 'volleyball-app-v1';
 // Install service worker
 self.addEventListener('install', event => {
   console.log('Service Worker installing');
-  // Skip waiting to activate immediately
   self.skipWaiting();
 });
 
 // Activate service worker
 self.addEventListener('activate', event => {
   console.log('Service Worker activating');
-  // Claim control of all pages immediately
   event.waitUntil(self.clients.claim());
 });
 
 // Fetch event - handle offline requests
 self.addEventListener('fetch', event => {
-  // Only handle same-origin requests (your app files)
-  if (!event.request.url.startsWith(self.location.origin)) {
+  const url = new URL(event.request.url);
+  
+  // Only handle requests for this origin
+  if (url.origin !== location.origin) {
     return;
   }
   
@@ -27,6 +27,7 @@ self.addEventListener('fetch', event => {
         return cache.match(event.request)
           .then(cachedResponse => {
             if (cachedResponse) {
+              console.log('Serving from cache:', event.request.url);
               return cachedResponse;
             }
             
@@ -34,17 +35,34 @@ self.addEventListener('fetch', event => {
             return fetch(event.request)
               .then(response => {
                 // Cache successful responses
-                if (response.ok) {
+                if (response && response.ok) {
+                  console.log('Caching:', event.request.url);
                   cache.put(event.request, response.clone());
                 }
                 return response;
               })
-              .catch(() => {
-                // If it's a page request and we're offline, return the cached index
-                if (event.request.destination === 'document') {
-                  return cache.match('/') || cache.match('/index.html');
+              .catch(error => {
+                console.log('Network failed for:', event.request.url);
+                
+                // If it's a navigation request and we're offline
+                if (event.request.mode === 'navigate') {
+                  // Try to return cached index.html or any cached HTML file
+                  return cache.match('./index.html')
+                    .then(cached => {
+                      if (cached) return cached;
+                      return cache.match('./');
+                    })
+                    .then(cached => {
+                      if (cached) return cached;
+                      // Fallback offline page
+                      return new Response(
+                        '<!DOCTYPE html><html><head><title>Offline</title></head><body><h1>Volleyball App</h1><p>You are offline. Please check your internet connection.</p></body></html>',
+                        { headers: { 'Content-Type': 'text/html' } }
+                      );
+                    });
                 }
-                throw new Error('Offline and no cached version available');
+                
+                throw error;
               });
           });
       })
