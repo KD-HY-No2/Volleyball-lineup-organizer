@@ -147,15 +147,17 @@
             });
 
             // Court positions (6 on court, rest on bench)
-            const [courtPositions, setCourtPositions] = useState({
-                backLeft: null,    // Position 1 - Serving position
-                frontLeft: null,   // Position 2
-                frontMiddle: null, // Position 3
-                frontRight: null,  // Position 4
-                backRight: null,   // Position 5
-                backMiddle: null,  // Position 6
-                bench: []
-            });
+            const [courtPositions, setCourtPositions] = useState(() => 
+                loadFromStorage('volleyball_courtPositions', {
+                    backLeft: null,
+                    frontLeft: null,
+                    frontMiddle: null,
+                    frontRight: null,
+                    backRight: null,
+                    backMiddle: null,
+                    bench: []
+                })
+            );
 
             // Save to localStorage whenever data changes
             useEffect(() => {
@@ -169,6 +171,10 @@
             useEffect(() => {
                 saveToStorage('volleyball_minThreshold', minThreshold);
             }, [minThreshold]);
+
+            useEffect(() => {
+                saveToStorage('volleyball_courtPositions', courtPositions);
+            }, [courtPositions]);
 
             // PWA Install Prompt Handling
             useEffect(() => {
@@ -227,9 +233,8 @@
                     setShowPlayerForm(false);
                 }
             };
-
-            const handleEditPlayer = (player) => {
-                if (draggedPlayer) return; // Don't edit while dragging
+const handleEditPlayer = (player) => {
+                if (draggedPlayer) return;
                 setEditingPlayer(player.id);
                 setPlayerForm(player);
                 setShowPlayerForm(true);
@@ -254,7 +259,6 @@
                 const currentStars = players.filter(p => p.star).length;
                 const targetPlayer = players.find(p => p.id === id);
                 
-                // If trying to add a star and already have 3, don't allow
                 if (!targetPlayer.star && currentStars >= 3) {
                     return;
                 }
@@ -264,7 +268,6 @@
                 ));
             };
 
-            // Helper function to check star player rules
             const checkStarRules = (positions) => {
                 const courtPlayers = [
                     positions.backLeft,
@@ -277,10 +280,8 @@
 
                 const starsOnCourt = courtPlayers.filter(p => p.star).length;
                 
-                // Must have at least 1 star on court
                 if (starsOnCourt === 0) return false;
 
-                // Check if stars are adjacent in rotation order
                 const starPositions = [];
                 if (positions.backLeft?.star) starPositions.push(1);
                 if (positions.frontLeft?.star) starPositions.push(2);
@@ -289,13 +290,11 @@
                 if (positions.backRight?.star) starPositions.push(5);
                 if (positions.backMiddle?.star) starPositions.push(6);
 
-                // Check for adjacent positions (including wraparound 6->1)
                 for (let i = 0; i < starPositions.length; i++) {
                     for (let j = i + 1; j < starPositions.length; j++) {
                         const pos1 = starPositions[i];
                         const pos2 = starPositions[j];
                         
-                        // Adjacent if difference is 1, or if they are 1 and 6 (wraparound)
                         if (Math.abs(pos1 - pos2) === 1 || (pos1 === 1 && pos2 === 6) || (pos1 === 6 && pos2 === 1)) {
                             return false;
                         }
@@ -305,12 +304,11 @@
                 return true;
             };
 
-            // Calculate rotation strengths
             const calculateRotationStrengths = (positions) => {
                 const rotations = [];
                 let currentPositions = { ...positions };
                 
-                for (let i = 0; i < 10; i++) { // Calculate 10 rotations
+                for (let i = 0; i < 10; i++) {
                     const frontRowTotal = (currentPositions.frontLeft?.defense || 0) + 
                                          (currentPositions.frontMiddle?.defense || 0) + 
                                          (currentPositions.frontRight?.defense || 0);
@@ -325,7 +323,6 @@
                         rotation: i
                     });
                     
-                    // Simulate rotation
                     const newPositions = {
                         backRight: currentPositions.backMiddle,
                         frontRight: currentPositions.backRight,
@@ -349,7 +346,7 @@
                 
                 return rotations;
             };
-// Standard Play Optimization Algorithm with Star Rules
+
             const optimizeStandardPlay = async () => {
                 setIsOptimizing(true);
                 
@@ -363,20 +360,17 @@
                     return;
                 }
 
-                // Must have at least 1 star player active for star rules to apply
                 if (starPlayers.length === 0) {
                     alert("Please select at least 1 star player to use optimization.");
                     setIsOptimizing(false);
                     return;
                 }
 
-                // Find top 3 defensive players
                 const sortedByDefense = [...activePlayers].sort((a, b) => b.defense - a.defense);
                 const top3Defenders = sortedByDefense.slice(0, 3);
 
                 let allLineups = [];
 
-                // Generate all possible combinations of 6 players from active players
                 const combinations = [];
                 const generateCombinations = (arr, size, start = 0, current = []) => {
                     if (current.length === size) {
@@ -392,7 +386,6 @@
                 
                 generateCombinations(activePlayers, 6);
 
-                // Filter combinations to ensure at least 1 star player
                 const validCombinations = combinations.filter(combo => 
                     combo.some(player => player.star)
                 );
@@ -426,18 +419,10 @@
                             bench: activePlayers.filter(p => !combo.includes(p))
                         };
 
-                        // Check star player rules
                         if (!checkStarRules(testPositions)) continue;
-
-                        // Check if at least one top 3 defender is in back row
-                        const backRowPlayers = [testPositions.backLeft, testPositions.backMiddle, testPositions.backRight];
-                        const hasTopDefenderInBack = backRowPlayers.some(player => 
-                            top3Defenders.some(topDef => topDef.id === player.id)
-                        );
 
                         const rotations = calculateRotationStrengths(testPositions);
                         
-                        // Calculate score
                         let aboveThresholdCount = 0;
                         let totalDefense = 0;
                         let servingScore = 0;
@@ -453,7 +438,6 @@
                             const rotationWeight = Math.max(1, 10 - index);
                             servingScore += rotation.serverRating * rotationWeight;
 
-                            // Simulate rotation for star count
                             let currentPos = { ...testPositions };
                             for (let r = 0; r < index; r++) {
                                 const newPos = {
@@ -482,7 +466,6 @@
                                 topDefenderInBackCount++;
                             }
 
-                            // Star bonus: prefer 2 stars on court
                             const courtPlayers = [currentPos.backLeft, currentPos.frontLeft, currentPos.frontMiddle, 
                                                 currentPos.frontRight, currentPos.backRight, currentPos.backMiddle];
                             const starsOnCourt = courtPlayers.filter(p => p && p.star).length;
@@ -493,7 +476,6 @@
                         const thresholdPercent = aboveThresholdCount / rotations.length;
                         const topDefenderPercent = topDefenderInBackCount / rotations.length;
                         
-                        // Enhanced score with star bonus
                         const score = (topDefenderPercent * 150) + (thresholdPercent * 100) + (avgDefense * 2) + (servingScore * 0.1) + starBonus;
 
                         allLineups.push({
@@ -506,7 +488,7 @@
                         });
                     }
 
-                    if (validCombinations.indexOf(combo) > 500) break; // Limit for performance
+                    if (validCombinations.indexOf(combo) > 500) break;
                 }
 
                 allLineups.sort((a, b) => b.score - a.score);
@@ -521,9 +503,7 @@
                 
                 setIsOptimizing(false);
             };
-
-            // Serving Priority Optimization with Star Rules
-            const optimizeServingPriority = async () => {
+const optimizeServingPriority = async () => {
                 setIsOptimizing(true);
                 
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -542,7 +522,6 @@
                     return;
                 }
 
-                // Find eligible first servers (serving >= 3) who are stars first, then non-stars
                 let eligibleServers = starPlayers.filter(p => p.serving >= 3);
                 if (eligibleServers.length === 0) {
                     eligibleServers = activePlayers.filter(p => p.serving >= 3);
@@ -586,7 +565,6 @@
                         bench: benchPlayers
                     };
 
-                    // Check star player rules
                     if (!checkStarRules(testPositions)) continue;
 
                     const rotations = calculateRotationStrengths(testPositions);
@@ -605,7 +583,6 @@
                         const rotationWeight = Math.max(1, 20 - (index * 2));
                         servingScore += rotation.serverRating * rotationWeight;
 
-                        // Star bonus for having 2 stars on court
                         let currentPos = { ...testPositions };
                         for (let r = 0; r < index; r++) {
                             const newPos = {
@@ -667,7 +644,8 @@
                 setCurrentLineupIndex(nextIndex);
                 setCourtPositions(bestLineups[nextIndex].positions);
             };
-const autoArrangePlayers = () => {
+
+            const autoArrangePlayers = () => {
                 const activePlayers = players.filter(p => p.active);
                 if (activePlayers.length < 6) return;
 
@@ -715,39 +693,6 @@ const autoArrangePlayers = () => {
                 setCourtPositions(newPositions);
             };
 
-            const rotateBackward = () => {
-                const courtPlayers = [
-                    courtPositions.backLeft,
-                    courtPositions.backMiddle,
-                    courtPositions.backRight,
-                    courtPositions.frontLeft,
-                    courtPositions.frontMiddle,
-                    courtPositions.frontRight
-                ].filter(Boolean);
-                
-                if (courtPlayers.length < 6) return;
-
-                const newPositions = {
-                    frontLeft: courtPositions.backLeft,
-                    frontMiddle: courtPositions.frontLeft,
-                    frontRight: courtPositions.frontMiddle,
-                    backRight: courtPositions.frontRight,
-                    backMiddle: courtPositions.backRight,
-                    bench: [...courtPositions.bench]
-                };
-
-                const newBench = [...courtPositions.bench];
-                newBench.unshift(courtPositions.backMiddle);
-                
-                if (newBench.length > 0) {
-                    newPositions.backLeft = newBench.pop();
-                }
-                
-                newPositions.bench = newBench;
-                setCourtPositions(newPositions);
-            };
-
-            // Export team data
             const exportData = () => {
                 const data = {
                     players,
@@ -769,7 +714,6 @@ const autoArrangePlayers = () => {
                 URL.revokeObjectURL(url);
             };
 
-            // Import team data
             const handleImportData = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
@@ -793,7 +737,6 @@ const autoArrangePlayers = () => {
                 event.target.value = '';
             };
 
-            // Drag and Drop handlers
             const handleDragStart = (e, player) => {
                 setDraggedPlayer(player);
                 e.dataTransfer.effectAllowed = 'move';
@@ -861,9 +804,40 @@ const autoArrangePlayers = () => {
                 setDropZone(null);
             };
 
-            const currentStrengths = calculateRotationStrengths(courtPositions).slice(0, 6);
+            const currentStrengths = calculateRotationStrengths(courtPositions).slice(0, 6); = newBench;
+                setCourtPositions(newPositions);
+            };
 
-            const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
+            const rotateBackward = () => {
+                const courtPlayers = [
+                    courtPositions.backLeft,
+                    courtPositions.backMiddle,
+                    courtPositions.backRight,
+                    courtPositions.frontLeft,
+                    courtPositions.frontMiddle,
+                    courtPositions.frontRight
+                ].filter(Boolean);
+                
+                if (courtPlayers.length < 6) return;
+
+                const newPositions = {
+                    frontLeft: courtPositions.backLeft,
+                    frontMiddle: courtPositions.frontLeft,
+                    frontRight: courtPositions.frontMiddle,
+                    backRight: courtPositions.frontRight,
+                    backMiddle: courtPositions.backRight,
+                    bench: [...courtPositions.bench]
+                };
+
+                const newBench = [...courtPositions.bench];
+                newBench.unshift(courtPositions.backMiddle);
+                
+                if (newBench.length > 0) {
+                    newPositions.backLeft = newBench.pop();
+                }
+                
+                newPositions.bench
+const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                 React.createElement('div', {
                     className: `p-3 rounded-lg shadow-md cursor-pointer transition-all ${
                         player.active 
@@ -897,7 +871,358 @@ const autoArrangePlayers = () => {
                         React.createElement('span', { className: "text-xs text-gray-400" }, "Empty")
                 )
             );
-React.createElement('div', { className: "flex items-center gap-2" },
+
+            const CourtDisplay = () => (
+                React.createElement('div', { className: "bg-orange-50 border-2 border-orange-300 rounded-lg p-4 mb-6" },
+                    React.createElement('div', { className: "text-center text-sm font-semibold mb-4 text-orange-800" },
+                        `${teamName} - Court Layout`
+                    ),
+                    
+                    currentStrengths.length > 0 && (
+                        React.createElement('div', { className: "mb-4 p-3 bg-white rounded-lg border" },
+                            React.createElement('div', { className: "text-xs font-semibold mb-2 text-center" }, 
+                                "Row Totals (Defense) - Min: " + minThreshold
+                            ),
+                            React.createElement('div', { className: "flex justify-between text-xs mb-2" },
+                                React.createElement('div', {}, 
+                                    `Front: ${currentStrengths[0]?.frontRowTotal || 0}`,
+                                    React.createElement('span', { 
+                                        className: `ml-1 ${(currentStrengths[0]?.frontRowTotal || 0) >= minThreshold ? 'text-green-600' : 'text-red-600'}`
+                                    }, (currentStrengths[0]?.frontRowTotal || 0) >= minThreshold ? '✓' : '✗')
+                                ),
+                                React.createElement('div', {}, 
+                                    `Back: ${currentStrengths[0]?.backRowTotal || 0}`,
+                                    React.createElement('span', { 
+                                        className: `ml-1 ${(currentStrengths[0]?.backRowTotal || 0) >= minThreshold ? 'text-green-600' : 'text-red-600'}`
+                                    }, (currentStrengths[0]?.backRowTotal || 0) >= minThreshold ? '✓' : '✗')
+                                )
+                            ),
+                            bestLineups.length > 0 && (
+                                React.createElement('div', { className: "text-xs text-center text-gray-600" },
+                                    `Lineup ${currentLineupIndex + 1} of ${bestLineups.length} best options`
+                                )
+                            )
+                        )
+                    ),
+
+                    React.createElement('div', { className: "border-b-2 border-dashed border-orange-400 pb-3 mb-3" },
+                        React.createElement('div', { className: "text-xs text-center mb-2 text-orange-700" }, "Back Row (20 ft)"),
+                        React.createElement('div', { className: "grid grid-cols-3 gap-2" },
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Left (Serve)"),
+                                React.createElement(DropZone, { 
+                                    position: "backLeft", 
+                                    currentPlayer: courtPositions.backLeft, 
+                                    label: "BL" 
+                                })
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Middle"),
+                                React.createElement(DropZone, { 
+                                    position: "backMiddle", 
+                                    currentPlayer: courtPositions.backMiddle, 
+                                    label: "BM" 
+                                })
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Right"),
+                                React.createElement(DropZone, { 
+                                    position: "backRight", 
+                                    currentPlayer: courtPositions.backRight, 
+                                    label: "BR" 
+                                })
+                            )
+                        )
+                    ),
+
+                    React.createElement('div', { className: "border-b-2 border-dashed border-orange-400 pb-3 mb-3" },
+                        React.createElement('div', { className: "text-xs text-center mb-2 text-orange-700" }, "Front Row (10 ft)"),
+                        React.createElement('div', { className: "grid grid-cols-3 gap-2" },
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Left"),
+                                React.createElement(DropZone, { 
+                                    position: "frontLeft", 
+                                    currentPlayer: courtPositions.frontLeft, 
+                                    label: "FL" 
+                                })
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Middle"),
+                                React.createElement(DropZone, { 
+                                    position: "frontMiddle", 
+                                    currentPlayer: courtPositions.frontMiddle, 
+                                    label: "FM" 
+                                })
+                            ),
+                            React.createElement('div', { className: "text-center" },
+                                React.createElement('div', { className: "text-xs mb-1" }, "Right"),
+                                React.createElement(DropZone, { 
+                                    position: "frontRight", 
+                                    currentPlayer: courtPositions.frontRight, 
+                                    label: "FR" 
+                                })
+                            )
+                        )
+                    ),
+
+                    React.createElement('div', { className: "w-full h-2 bg-black mb-4 rounded" }),
+
+                    React.createElement('div', { className: "flex justify-center gap-4 mb-4" },
+                        React.createElement('button', {
+                            onClick: rotateBackward,
+                            className: "flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed",
+                            disabled: [courtPositions.backLeft, courtPositions.backMiddle, courtPositions.backRight, courtPositions.frontLeft, courtPositions.frontMiddle, courtPositions.frontRight].filter(Boolean).length < 6
+                        },
+                            "⟲ Previous"
+                        ),
+                        React.createElement('button', {
+                            onClick: rotateForward,
+                            className: "flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed",
+                            disabled: [courtPositions.backLeft, courtPositions.backMiddle, courtPositions.backRight, courtPositions.frontLeft, courtPositions.frontMiddle, courtPositions.frontRight].filter(Boolean).length < 6
+                        },
+                            "Next ⟳"
+                        )
+                    )
+                )
+            );
+
+            const BenchDisplay = () => (
+                React.createElement('div', { 
+                    className: "bg-green-50 border-2 border-green-300 rounded-lg p-4 mb-6",
+                    onDragOver: handleDragOver,
+                    onDragEnter: (e) => handleDragEnter(e, 'bench'),
+                    onDragLeave: handleDragLeave,
+                    onDrop: (e) => handleDrop(e, 'bench')
+                },
+                    React.createElement('div', { className: "text-center text-sm font-semibold mb-3 text-green-800" },
+                        "Bench Players (Next to rotate in at bottom)"
+                    ),
+                    React.createElement('div', { className: "space-y-2" },
+                        courtPositions.bench.map((player, index) => (
+                            React.createElement('div', { key: player.id, className: "flex items-center gap-2" },
+                                React.createElement('span', { className: "text-xs w-6 text-center" }, courtPositions.bench.length - index),
+                                React.createElement(PlayerTile, { player: player, isOnCourt: false, benchIndex: index })
+                            )
+                        )),
+                        courtPositions.bench.length === 0 && (
+                            React.createElement('div', { className: "text-center text-gray-500 text-sm" }, "No bench players")
+                        )
+                    )
+                )
+            );
+
+            return React.createElement('div', { className: "max-w-md mx-auto bg-white min-h-screen p-4" },
+                // PWA Install Prompt
+                showInstallPrompt && (
+                    React.createElement('div', { className: "install-prompt mb-4 p-4 text-white rounded-lg flex items-center justify-between" },
+                        React.createElement('div', {},
+                            React.createElement('div', { className: "font-semibold text-sm" }, "Install Volleyball App"),
+                            React.createElement('div', { className: "text-xs opacity-90" }, "Add to home screen for offline use")
+                        ),
+                        React.createElement('div', { className: "flex gap-2" },
+                            React.createElement('button', {
+                                onClick: () => setShowInstallPrompt(false),
+                                className: "px-3 py-1 bg-white bg-opacity-20 rounded text-xs"
+                            }, "Later"),
+                            React.createElement('button', {
+                                onClick: handleInstallClick,
+                                className: "px-3 py-1 bg-white text-purple-600 rounded text-xs font-semibold"
+                            }, "Install")
+                        )
+                    )
+                ),
+
+                // Header with enhanced save functionality
+                React.createElement('div', { className: "flex items-center justify-between mb-6" },
+                    React.createElement('input', {
+                        type: "text",
+                        value: teamName,
+                        onChange: (e) => setTeamName(e.target.value),
+                        className: "text-lg font-bold bg-transparent border-b-2 border-gray-300 focus:border-blue-500 outline-none"
+                    }),
+                    React.createElement('div', { className: "flex gap-2" },
+                        React.createElement('button', { 
+                            onClick: exportData,
+                            className: "p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600",
+                            title: "Export team data"
+                        },
+                            "💾"
+                        ),
+                        React.createElement('label', { 
+                            className: "p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 cursor-pointer",
+                            title: "Import team data"
+                        },
+                            "📂",
+                            React.createElement('input', {
+                                type: "file",
+                                accept: ".json",
+                                onChange: handleImportData,
+                                className: "hidden"
+                            })
+                        )
+                    )
+                ),
+
+                // Star Player Status
+                React.createElement('div', { className: "mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg" },
+                    React.createElement('div', { className: "text-sm font-medium text-yellow-800 mb-1" },
+                        `Star Players: ${players.filter(p => p.star).length}/3`
+                    ),
+                    React.createElement('div', { className: "text-xs text-yellow-700" },
+                        "⭐ Select up to 3 star players. Algorithms ensure 1+ star always on court, prefer 2, and prevent adjacent positioning."
+                    )
+                ),
+
+                // Court Display
+                React.createElement(CourtDisplay),
+                
+                // Bench Display
+                React.createElement(BenchDisplay),
+
+                // Optimization Controls
+                React.createElement('div', { className: "mb-4 p-4 bg-gray-50 rounded-lg" },
+                    React.createElement('div', { className: "mb-3" },
+                        React.createElement('label', { className: "block text-sm font-medium mb-1" }, 
+                            `Minimum Row Total: ${minThreshold}`
+                        ),
+                        React.createElement('input', {
+                            type: "range",
+                            min: "3",
+                            max: "15",
+                            value: minThreshold,
+                            onChange: (e) => setMinThreshold(parseInt(e.target.value)),
+                            className: "w-full"
+                        }),
+                        React.createElement('div', { className: "flex justify-between text-xs text-gray-500 mt-1" },
+                            React.createElement('span', {}, "3"),
+                            React.createElement('span', {}, "15")
+                        )
+                    ),
+                    React.createElement('div', { className: "flex gap-2" },
+                        React.createElement('button', {
+                            onClick: optimizeStandardPlay,
+                            className: `flex-1 p-3 text-white rounded-lg transition-colors ${
+                                isOptimizing ? 'optimizing cursor-not-allowed' : 'bg-purple-500 hover:bg-purple-600'
+                            }`,
+                            disabled: isOptimizing || players.filter(p => p.active).length < 6
+                        },
+                            isOptimizing ? "Optimizing..." : "🎯 Standard Play"
+                        ),
+                        React.createElement('button', {
+                            onClick: optimizeServingPriority,
+                            className: `flex-1 p-3 text-white rounded-lg transition-colors ${
+                                isOptimizing ? 'optimizing cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'
+                            }`,
+                            disabled: isOptimizing || players.filter(p => p.active).length < 6
+                        },
+                            isOptimizing ? "Optimizing..." : "⚡ Serving Priority"
+                        ),
+                        React.createElement('button', {
+                            onClick: shuffleStandardPlay,
+                            className: "px-3 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-400",
+                            disabled: bestLineups.length === 0,
+                            title: "Shuffle through best lineups"
+                        },
+                            "🔀"
+                        )
+                    ),
+                    React.createElement('div', { className: "flex gap-2 mt-2" },
+                        React.createElement('button', {
+                            onClick: autoArrangePlayers,
+                            className: "flex-1 p-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors",
+                            disabled: players.filter(p => p.active).length < 6
+                        },
+                            "📋 Basic Setup"
+                        )
+                    )
+                ),
+
+                // Players List
+                React.createElement('div', { className: "mb-6" },
+                    React.createElement('div', { className: "flex items-center justify-between mb-3" },
+                        React.createElement('h2', { className: "text-lg font-semibold" }, `Team Roster (${players.length}/10)`),
+                        React.createElement('button', {
+                            onClick: () => setShowPlayerForm(true),
+                            className: "flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                        },
+                            "+ Add Player"
+                        )
+                    ),
+                    
+                    React.createElement('div', { className: "space-y-2" },
+                        players.map(player => (
+                            React.createElement('div', { key: player.id, className: "flex items-center gap-3" },
+                                React.createElement('button', {
+                                    onClick: () => togglePlayerActive(player.id),
+                                    className: `w-4 h-4 rounded border-2 ${
+                                        player.active ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                                    }`
+                                }),
+                                React.createElement('button', {
+                                    onClick: () => togglePlayerStar(player.id),
+                                    className: `w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                        player.star ? 'bg-yellow-400 border-yellow-500' : 'border-gray-300 hover:border-yellow-400'
+                                    } ${players.filter(p => p.star).length >= 3 && !player.star ? 'opacity-50 cursor-not-allowed' : ''}`,
+                                    disabled: players.filter(p => p.star).length >= 3 && !player.star
+                                },
+                                    React.createElement('span', { className: "text-xs" }, player.star ? '⭐' : '☆')
+                                ),
+                                React.createElement(PlayerTile, { player: player, isOnCourt: false }),
+                                React.createElement('div', { className: "text-xs text-gray-600" },
+                                    `D:${player.defense} S:${player.serving}`
+                                )
+                            )
+                        ))
+                    )
+                ),
+
+                // Player Form Modal
+                showPlayerForm && (
+                    React.createElement('div', { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" },
+                        React.createElement('div', { className: "bg-white rounded-lg p-6 w-80 mx-4" },
+                            React.createElement('h3', { className: "text-lg font-semibold mb-4" },
+                                editingPlayer ? 'Edit Player' : 'Add New Player'
+                            ),
+                            
+                            React.createElement('div', { className: "space-y-4" },
+                                React.createElement('div', {},
+                                    React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Player Name"),
+                                    React.createElement('input', {
+                                        type: "text",
+                                        value: playerForm.name,
+                                        onChange: (e) => setPlayerForm({...playerForm, name: e.target.value}),
+                                        className: "w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none",
+                                        placeholder: "Enter player name"
+                                    })
+                                ),
+                                
+                                React.createElement('div', {},
+                                    React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Defense Rating (1-5)"),
+                                    React.createElement('input', {
+                                        type: "range",
+                                        min: "1",
+                                        max: "5",
+                                        value: playerForm.defense,
+                                        onChange: (e) => setPlayerForm({...playerForm, defense: parseInt(e.target.value)}),
+                                        className: "w-full"
+                                    }),
+                                    React.createElement('div', { className: "text-center font-semibold" }, playerForm.defense)
+                                ),
+                                
+                                React.createElement('div', {},
+                                    React.createElement('label', { className: "block text-sm font-medium mb-1" }, "Serving Rating (1-5)"),
+                                    React.createElement('input', {
+                                        type: "range",
+                                        min: "1",
+                                        max: "5",
+                                        value: playerForm.serving,
+                                        onChange: (e) => setPlayerForm({...playerForm, serving: parseInt(e.target.value)}),
+                                        className: "w-full"
+                                    }),
+                                    React.createElement('div', { className: "text-center font-semibold" }, playerForm.serving)
+                                ),
+
+                                React.createElement('div', { className: "flex items-center gap-2" },
                                     React.createElement('label', { className: "block text-sm font-medium" }, "Star Player"),
                                     React.createElement('button', {
                                         onClick: () => setPlayerForm({...playerForm, star: !playerForm.star}),
@@ -907,20 +1232,11 @@ React.createElement('div', { className: "flex items-center gap-2" },
                                         type: "button"
                                     },
                                         React.createElement('span', { className: "text-xs" }, playerForm.star ? '⭐' : '☆')
-                                    
+                                    )
                                 )
                             ),
                             
                             React.createElement('div', { className: "flex gap-3 mt-6" },
-                                React.createElement('button', {
-                                    onClick: () => {
-                                        setShowPlayerForm(false);
-                                        setEditingPlayer(null);
-                                        setPlayerForm({ name: '', defense: 3, serving: 3, active: true, star: false });
-                                    },
-                                    className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                                }, "Cancel"),
-                               React.createElement('div', { className: "flex gap-3 mt-6" },
                                 React.createElement('button', {
                                     onClick: () => {
                                         setShowPlayerForm(false);
