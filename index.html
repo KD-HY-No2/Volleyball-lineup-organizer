@@ -149,12 +149,12 @@
             // Court positions (6 on court, rest on bench)
             const [courtPositions, setCourtPositions] = useState(() => 
                 loadFromStorage('volleyball_courtPositions', {
-                    backLeft: null,
-                    frontLeft: null,
-                    frontMiddle: null,
-                    frontRight: null,
-                    backRight: null,
-                    backMiddle: null,
+                    backLeft: null,    // Position 1 - Serving position
+                    frontLeft: null,   // Position 2
+                    frontMiddle: null, // Position 3
+                    frontRight: null,  // Position 4
+                    backRight: null,   // Position 5
+                    backMiddle: null,  // Position 6
                     bench: []
                 })
             );
@@ -221,8 +221,7 @@
                     setDeferredPrompt(null);
                 }
             };
-
-            const handleAddPlayer = () => {
+const handleAddPlayer = () => {
                 if (playerForm.name.trim()) {
                     const newPlayer = {
                         id: Date.now(),
@@ -233,8 +232,9 @@
                     setShowPlayerForm(false);
                 }
             };
-const handleEditPlayer = (player) => {
-                if (draggedPlayer) return;
+
+            const handleEditPlayer = (player) => {
+                if (draggedPlayer) return; // Don't edit while dragging
                 setEditingPlayer(player.id);
                 setPlayerForm(player);
                 setShowPlayerForm(true);
@@ -259,6 +259,7 @@ const handleEditPlayer = (player) => {
                 const currentStars = players.filter(p => p.star).length;
                 const targetPlayer = players.find(p => p.id === id);
                 
+                // If trying to add a star and already have 3, don't allow
                 if (!targetPlayer.star && currentStars >= 3) {
                     return;
                 }
@@ -268,6 +269,53 @@ const handleEditPlayer = (player) => {
                 ));
             };
 
+            // Export team data
+            const exportData = () => {
+                const data = {
+                    players,
+                    teamName,
+                    minThreshold,
+                    courtPositions,
+                    exportDate: new Date().toISOString()
+                };
+                
+                const dataStr = JSON.stringify(data, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `volleyball_team_${teamName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                
+                URL.revokeObjectURL(url);
+            };
+
+            // Import team data
+            const handleImportData = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        
+                        if (importedData.players) setPlayers(importedData.players);
+                        if (importedData.teamName) setTeamName(importedData.teamName);
+                        if (importedData.minThreshold) setMinThreshold(importedData.minThreshold);
+                        if (importedData.courtPositions) setCourtPositions(importedData.courtPositions);
+                        
+                        alert('Team data imported successfully!');
+                    } catch (error) {
+                        alert('Error importing data. Please check the file format.');
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            // Helper function to check star player rules
             const checkStarRules = (positions) => {
                 const courtPlayers = [
                     positions.backLeft,
@@ -280,8 +328,10 @@ const handleEditPlayer = (player) => {
 
                 const starsOnCourt = courtPlayers.filter(p => p.star).length;
                 
+                // Must have at least 1 star on court
                 if (starsOnCourt === 0) return false;
 
+                // Check if stars are adjacent in rotation order
                 const starPositions = [];
                 if (positions.backLeft?.star) starPositions.push(1);
                 if (positions.frontLeft?.star) starPositions.push(2);
@@ -290,11 +340,13 @@ const handleEditPlayer = (player) => {
                 if (positions.backRight?.star) starPositions.push(5);
                 if (positions.backMiddle?.star) starPositions.push(6);
 
+                // Check for adjacent positions (including wraparound 6->1)
                 for (let i = 0; i < starPositions.length; i++) {
                     for (let j = i + 1; j < starPositions.length; j++) {
                         const pos1 = starPositions[i];
                         const pos2 = starPositions[j];
                         
+                        // Adjacent if difference is 1, or if they are 1 and 6 (wraparound)
                         if (Math.abs(pos1 - pos2) === 1 || (pos1 === 1 && pos2 === 6) || (pos1 === 6 && pos2 === 1)) {
                             return false;
                         }
@@ -304,11 +356,12 @@ const handleEditPlayer = (player) => {
                 return true;
             };
 
+            // Calculate rotation strengths
             const calculateRotationStrengths = (positions) => {
                 const rotations = [];
                 let currentPositions = { ...positions };
                 
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < 10; i++) { // Calculate 10 rotations
                     const frontRowTotal = (currentPositions.frontLeft?.defense || 0) + 
                                          (currentPositions.frontMiddle?.defense || 0) + 
                                          (currentPositions.frontRight?.defense || 0);
@@ -323,6 +376,7 @@ const handleEditPlayer = (player) => {
                         rotation: i
                     });
                     
+                    // Simulate rotation
                     const newPositions = {
                         backRight: currentPositions.backMiddle,
                         frontRight: currentPositions.backRight,
@@ -347,6 +401,7 @@ const handleEditPlayer = (player) => {
                 return rotations;
             };
 
+// Standard Play Optimization Algorithm with Star Rules
             const optimizeStandardPlay = async () => {
                 setIsOptimizing(true);
                 
@@ -360,17 +415,20 @@ const handleEditPlayer = (player) => {
                     return;
                 }
 
+                // Must have at least 1 star player active for star rules to apply
                 if (starPlayers.length === 0) {
                     alert("Please select at least 1 star player to use optimization.");
                     setIsOptimizing(false);
                     return;
                 }
 
+                // Find top 3 defensive players
                 const sortedByDefense = [...activePlayers].sort((a, b) => b.defense - a.defense);
                 const top3Defenders = sortedByDefense.slice(0, 3);
 
                 let allLineups = [];
 
+                // Generate all possible combinations of 6 players from active players
                 const combinations = [];
                 const generateCombinations = (arr, size, start = 0, current = []) => {
                     if (current.length === size) {
@@ -385,7 +443,7 @@ const handleEditPlayer = (player) => {
                 };
                 
                 generateCombinations(activePlayers, 6);
-
+// Filter combinations to ensure at least 1 star player
                 const validCombinations = combinations.filter(combo => 
                     combo.some(player => player.star)
                 );
@@ -419,10 +477,18 @@ const handleEditPlayer = (player) => {
                             bench: activePlayers.filter(p => !combo.includes(p))
                         };
 
+                        // Check star player rules
                         if (!checkStarRules(testPositions)) continue;
+
+                        // Check if at least one top 3 defender is in back row
+                        const backRowPlayers = [testPositions.backLeft, testPositions.backMiddle, testPositions.backRight];
+                        const hasTopDefenderInBack = backRowPlayers.some(player => 
+                            top3Defenders.some(topDef => topDef.id === player.id)
+                        );
 
                         const rotations = calculateRotationStrengths(testPositions);
                         
+                        // Calculate score
                         let aboveThresholdCount = 0;
                         let totalDefense = 0;
                         let servingScore = 0;
@@ -438,6 +504,7 @@ const handleEditPlayer = (player) => {
                             const rotationWeight = Math.max(1, 10 - index);
                             servingScore += rotation.serverRating * rotationWeight;
 
+                            // Simulate rotation for star count
                             let currentPos = { ...testPositions };
                             for (let r = 0; r < index; r++) {
                                 const newPos = {
@@ -466,6 +533,7 @@ const handleEditPlayer = (player) => {
                                 topDefenderInBackCount++;
                             }
 
+                            // Star bonus: prefer 2 stars on court
                             const courtPlayers = [currentPos.backLeft, currentPos.frontLeft, currentPos.frontMiddle, 
                                                 currentPos.frontRight, currentPos.backRight, currentPos.backMiddle];
                             const starsOnCourt = courtPlayers.filter(p => p && p.star).length;
@@ -476,6 +544,7 @@ const handleEditPlayer = (player) => {
                         const thresholdPercent = aboveThresholdCount / rotations.length;
                         const topDefenderPercent = topDefenderInBackCount / rotations.length;
                         
+                        // Enhanced score with star bonus
                         const score = (topDefenderPercent * 150) + (thresholdPercent * 100) + (avgDefense * 2) + (servingScore * 0.1) + starBonus;
 
                         allLineups.push({
@@ -488,7 +557,7 @@ const handleEditPlayer = (player) => {
                         });
                     }
 
-                    if (validCombinations.indexOf(combo) > 500) break;
+                    if (validCombinations.indexOf(combo) > 500) break; // Limit for performance
                 }
 
                 allLineups.sort((a, b) => b.score - a.score);
@@ -503,7 +572,9 @@ const handleEditPlayer = (player) => {
                 
                 setIsOptimizing(false);
             };
-const optimizeServingPriority = async () => {
+
+            // Serving Priority Optimization with Star Rules
+            const optimizeServingPriority = async () => {
                 setIsOptimizing(true);
                 
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -522,6 +593,7 @@ const optimizeServingPriority = async () => {
                     return;
                 }
 
+                // Find eligible first servers (serving >= 3) who are stars first, then non-stars
                 let eligibleServers = starPlayers.filter(p => p.serving >= 3);
                 if (eligibleServers.length === 0) {
                     eligibleServers = activePlayers.filter(p => p.serving >= 3);
@@ -565,6 +637,7 @@ const optimizeServingPriority = async () => {
                         bench: benchPlayers
                     };
 
+                    // Check star player rules
                     if (!checkStarRules(testPositions)) continue;
 
                     const rotations = calculateRotationStrengths(testPositions);
@@ -583,6 +656,7 @@ const optimizeServingPriority = async () => {
                         const rotationWeight = Math.max(1, 20 - (index * 2));
                         servingScore += rotation.serverRating * rotationWeight;
 
+                        // Star bonus for having 2 stars on court
                         let currentPos = { ...testPositions };
                         for (let r = 0; r < index; r++) {
                             const newPos = {
@@ -636,8 +710,7 @@ const optimizeServingPriority = async () => {
                 
                 setIsOptimizing(false);
             };
-
-            const shuffleStandardPlay = () => {
+const shuffleStandardPlay = () => {
                 if (bestLineups.length === 0) return;
                 
                 const nextIndex = (currentLineupIndex + 1) % bestLineups.length;
@@ -693,50 +766,39 @@ const optimizeServingPriority = async () => {
                 setCourtPositions(newPositions);
             };
 
-            const exportData = () => {
-                const data = {
-                    players,
-                    teamName,
-                    minThreshold,
-                    courtPositions,
-                    exportDate: new Date().toISOString()
+            const rotateBackward = () => {
+                const courtPlayers = [
+                    courtPositions.backLeft,
+                    courtPositions.backMiddle,
+                    courtPositions.backRight,
+                    courtPositions.frontLeft,
+                    courtPositions.frontMiddle,
+                    courtPositions.frontRight
+                ].filter(Boolean);
+                
+                if (courtPlayers.length < 6) return;
+
+                const newPositions = {
+                    frontLeft: courtPositions.backLeft,
+                    frontMiddle: courtPositions.frontLeft,
+                    frontRight: courtPositions.frontMiddle,
+                    backRight: courtPositions.frontRight,
+                    backMiddle: courtPositions.backRight,
+                    bench: [...courtPositions.bench]
                 };
+
+                const newBench = [...courtPositions.bench];
+                newBench.unshift(courtPositions.backMiddle);
                 
-                const dataStr = JSON.stringify(data, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
+                if (newBench.length > 0) {
+                    newPositions.backLeft = newBench.pop();
+                }
                 
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `volleyball_team_${teamName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
-                link.click();
-                
-                URL.revokeObjectURL(url);
+                newPositions.bench = newBench;
+                setCourtPositions(newPositions);
             };
 
-            const handleImportData = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const importedData = JSON.parse(e.target.result);
-                        
-                        if (importedData.players) setPlayers(importedData.players);
-                        if (importedData.teamName) setTeamName(importedData.teamName);
-                        if (importedData.minThreshold) setMinThreshold(importedData.minThreshold);
-                        if (importedData.courtPositions) setCourtPositions(importedData.courtPositions);
-                        
-                        alert('Team data imported successfully!');
-                    } catch (error) {
-                        alert('Error importing data. Please check the file format.');
-                    }
-                };
-                reader.readAsText(file);
-                event.target.value = '';
-            };
-
+            // Drag and Drop handlers
             const handleDragStart = (e, player) => {
                 setDraggedPlayer(player);
                 e.dataTransfer.effectAllowed = 'move';
@@ -805,39 +867,8 @@ const optimizeServingPriority = async () => {
             };
 
             const currentStrengths = calculateRotationStrengths(courtPositions).slice(0, 6);
-                setCourtPositions(newPositions);
-            };
 
-            const rotateBackward = () => {
-                const courtPlayers = [
-                    courtPositions.backLeft,
-                    courtPositions.backMiddle,
-                    courtPositions.backRight,
-                    courtPositions.frontLeft,
-                    courtPositions.frontMiddle,
-                    courtPositions.frontRight
-                ].filter(Boolean);
-                
-                if (courtPlayers.length < 6) return;
-
-                const newPositions = {
-                    frontLeft: courtPositions.backLeft,
-                    frontMiddle: courtPositions.frontLeft,
-                    frontRight: courtPositions.frontMiddle,
-                    backRight: courtPositions.frontRight,
-                    backMiddle: courtPositions.backRight,
-                    bench: [...courtPositions.bench]
-                };
-
-                const newBench = [...courtPositions.bench];
-                newBench.unshift(courtPositions.backMiddle);
-                
-                if (newBench.length > 0) {
-                    newPositions.backLeft = newBench.pop();
-                }
-                
-                newPositions.bench
-const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
+            const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                 React.createElement('div', {
                     className: `p-3 rounded-lg shadow-md cursor-pointer transition-all ${
                         player.active 
@@ -878,6 +909,7 @@ const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                         `${teamName} - Court Layout`
                     ),
                     
+                    // Current rotation strengths
                     currentStrengths.length > 0 && (
                         React.createElement('div', { className: "mb-4 p-3 bg-white rounded-lg border" },
                             React.createElement('div', { className: "text-xs font-semibold mb-2 text-center" }, 
@@ -904,7 +936,7 @@ const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                             )
                         )
                     ),
-
+// Back Row (20 ft line) - furthest from net
                     React.createElement('div', { className: "border-b-2 border-dashed border-orange-400 pb-3 mb-3" },
                         React.createElement('div', { className: "text-xs text-center mb-2 text-orange-700" }, "Back Row (20 ft)"),
                         React.createElement('div', { className: "grid grid-cols-3 gap-2" },
@@ -935,6 +967,7 @@ const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                         )
                     ),
 
+                    // Front Row (10 ft line)
                     React.createElement('div', { className: "border-b-2 border-dashed border-orange-400 pb-3 mb-3" },
                         React.createElement('div', { className: "text-xs text-center mb-2 text-orange-700" }, "Front Row (10 ft)"),
                         React.createElement('div', { className: "grid grid-cols-3 gap-2" },
@@ -965,8 +998,10 @@ const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                         )
                     ),
 
+                    // Net at the bottom
                     React.createElement('div', { className: "w-full h-2 bg-black mb-4 rounded" }),
 
+                    // Rotation Controls
                     React.createElement('div', { className: "flex justify-center gap-4 mb-4" },
                         React.createElement('button', {
                             onClick: rotateBackward,
@@ -1136,8 +1171,7 @@ const PlayerTile = ({ player, position, isOnCourt, benchIndex }) => (
                         )
                     )
                 ),
-
-                // Players List
+// Players List
                 React.createElement('div', { className: "mb-6" },
                     React.createElement('div', { className: "flex items-center justify-between mb-3" },
                         React.createElement('h2', { className: "text-lg font-semibold" }, `Team Roster (${players.length}/10)`),
