@@ -1,94 +1,52 @@
 const CACHE_NAME = 'volleyball-app-v1';
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-];
 
-// Install service worker and cache resources
+// Install service worker
 self.addEventListener('install', event => {
-  event.waitUntil(
+  console.log('Service Worker installing');
+  // Skip waiting to activate immediately
+  self.skipWaiting();
+});
+
+// Activate service worker
+self.addEventListener('activate', event => {
+  console.log('Service Worker activating');
+  // Claim control of all pages immediately
+  event.waitUntil(self.clients.claim());
+});
+
+// Fetch event - handle offline requests
+self.addEventListener('fetch', event => {
+  // Only handle same-origin requests (your app files)
+  if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+  
+  event.respondWith(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Opened cache');
-        // Cache core files first
-        return cache.addAll(urlsToCache)
-          .then(() => {
-            // Try to cache CDN resources, but don't fail if they're unavailable
-            const cdnUrls = [
-              'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
-              'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
-              'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js',
-              'https://cdn.tailwindcss.com'
-            ];
-            
-            return Promise.allSettled(
-              cdnUrls.map(url => cache.add(url).catch(err => {
-                console.warn('Failed to cache:', url, err);
-                return null;
-              }))
-            );
-          });
-      })
-      .catch(error => {
-        console.error('Cache installation failed:', error);
-      })
-  );
-});
-
-// Fetch event - serve from cache when offline, fallback to network
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version if available
-        if (response) {
-          return response;
-        }
-        
-        // Try network request
-        return fetch(event.request)
-          .then(response => {
-            // Don't cache non-successful responses
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
+        return cache.match(event.request)
+          .then(cachedResponse => {
+            if (cachedResponse) {
+              return cachedResponse;
             }
             
-            // Clone the response for caching
-            const responseToCache = response.clone();
-            
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
+            // Try to fetch from network
+            return fetch(event.request)
+              .then(response => {
+                // Cache successful responses
+                if (response.ok) {
+                  cache.put(event.request, response.clone());
+                }
+                return response;
+              })
+              .catch(() => {
+                // If it's a page request and we're offline, return the cached index
+                if (event.request.destination === 'document') {
+                  return cache.match('/') || cache.match('/index.html');
+                }
+                throw new Error('Offline and no cached version available');
               });
-            
-            return response;
-          })
-          .catch(() => {
-            // If both cache and network fail, return a basic offline page
-            if (event.request.destination === 'document') {
-              return new Response(
-                '<h1>Offline</h1><p>This page is not available offline.</p>',
-                { headers: { 'Content-Type': 'text/html' } }
-              );
-            }
           });
       })
-  );
-});
-
-// Activate event - clean up old caches
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
   );
 });
