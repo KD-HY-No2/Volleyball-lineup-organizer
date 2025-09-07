@@ -920,6 +920,15 @@ React.createElement('div', { className: "flex items-center gap-2" },
                                     },
                                     className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                                 }, "Cancel"),
+                               React.createElement('div', { className: "flex gap-3 mt-6" },
+                                React.createElement('button', {
+                                    onClick: () => {
+                                        setShowPlayerForm(false);
+                                        setEditingPlayer(null);
+                                        setPlayerForm({ name: '', defense: 3, serving: 3, active: true, star: false });
+                                    },
+                                    className: "flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                }, "Cancel"),
                                 React.createElement('button', {
                                     onClick: editingPlayer ? handleUpdatePlayer : handleAddPlayer,
                                     className: "flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600",
